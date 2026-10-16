@@ -6,3 +6,14 @@ playwright-report/
 *.local
 *.tsbuildinfo
 .DS_Store
+
+.env
+.env.*
+!deploy/.env.example
+data/
+backups/
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.db
+*.db-*

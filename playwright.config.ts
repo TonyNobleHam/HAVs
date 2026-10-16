@@ -3,6 +3,8 @@ import { existsSync } from "node:fs";
 
 export default defineConfig({
   testDir: "./e2e",
+  testMatch: "workspace.spec.ts",
+  outputDir: "test-results/demo",
   fullyParallel: false,
   workers: 1,
   reporter: "list",

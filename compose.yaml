@@ -1,0 +1,45 @@
+name: havs
+
+services:
+  app:
+    image: havs-workspace:local
+    build: .
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: production
+      APP_ORIGIN: https://${HAVS_DOMAIN:?Set HAVS_DOMAIN in .env to your domain}
+      HOST: 0.0.0.0
+      PORT: "3001"
+      HAVS_DATA_DIR: /app/data
+    volumes:
+      - havs_data:/app/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      HAVS_DOMAIN: ${HAVS_DOMAIN:?Set HAVS_DOMAIN in .env to your domain}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  havs_data:
+  caddy_data:
+  caddy_config:

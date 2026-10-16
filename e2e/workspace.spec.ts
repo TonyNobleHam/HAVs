@@ -5,7 +5,7 @@ test("dashboard, tool search and all navigation work without browser errors", as
 }) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  await page.goto("/");
+  await page.goto("/?demo=1");
   await expect(
     page.getByRole("heading", { name: "현장의 위험을, 한눈에." }),
   ).toBeVisible();
@@ -32,7 +32,7 @@ test("dashboard, tool search and all navigation work without browser errors", as
 test("create tool, assess exposure, preserve history, edit and persist across reload", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/?demo=1");
   await page.getByRole("button", { name: "공구 데이터베이스" }).click();
   await page.getByRole("button", { name: "공구 등록", exact: true }).click();
   const form = page.getByRole("dialog");
@@ -87,7 +87,7 @@ test("create tool, assess exposure, preserve history, edit and persist across re
 });
 
 test("duplicate worker/day is blocked", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?demo=1");
   await page.getByRole("button", { name: "새 노출 평가", exact: true }).click();
   const form = page.getByRole("dialog");
   await form.getByLabel("작업자 이름").fill("김민수");
@@ -102,7 +102,7 @@ test("duplicate worker/day is blocked", async ({ page }) => {
 test("project creation, report date filter, JSON export and restore", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/?demo=1");
   await page.getByRole("button", { name: "프로젝트", exact: true }).click();
   await page.getByRole("button", { name: "프로젝트 만들기" }).click();
   const dialog = page.getByRole("dialog");
@@ -151,7 +151,7 @@ test("mobile navigation and evaluation form fit the screen", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
+  await page.goto("/?demo=1");
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth,
@@ -182,7 +182,7 @@ test("empty workspace can create a project and tool, assess missing noise and pr
       JSON.stringify({ version: 1, tools: [], projects: [], assessments: [] }),
     ),
   );
-  await page.goto("/");
+  await page.goto("/?demo=1");
   await page.getByRole("button", { name: "새 노출 평가", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "공구와 프로젝트를 먼저 등록해 주세요" }),
@@ -235,7 +235,7 @@ test("malformed stored data remains untouched and shows recovery instructions", 
   await page.addInitScript(() =>
     localStorage.setItem("havs.workspace.v1", "{invalid-json"),
   );
-  await page.goto("/");
+  await page.goto("/?demo=1");
   await expect(page.getByRole("alert")).toContainText(
     "기존 데이터는 덮어쓰지 않습니다",
   );

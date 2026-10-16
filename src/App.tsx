@@ -18,6 +18,7 @@ import {
   Gauge,
   HardHat,
   LayoutDashboard,
+  LogOut,
   Menu,
   Pencil,
   Plus,
@@ -50,6 +51,7 @@ import type {
   Workspace,
 } from "./domain";
 import { download, useWorkspace } from "./storage";
+import type { Connection } from "./api";
 
 type View = "dashboard" | "tools" | "assessments" | "projects" | "guide";
 const navigation: { id: View; title: string; icon: typeof Waves }[] = [
@@ -1808,10 +1810,12 @@ function GuidePage({
   data,
   replace,
   notify,
+  cloud,
 }: {
   data: Workspace;
   replace: (data: Workspace) => void;
   notify: (message: string) => void;
+  cloud: boolean;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [importError, setImportError] = useState("");
@@ -1819,8 +1823,8 @@ function GuidePage({
     if (!file) return;
     setImportError("");
     try {
-      if (file.size > 5_000_000)
-        throw new Error("백업 파일은 5MB 이하여야 합니다.");
+      if (file.size > (cloud ? 2_000_000 : 5_000_000))
+        throw new Error(`백업 파일은 ${cloud ? 2 : 5}MB 이하여야 합니다.`);
       const value: unknown = JSON.parse(await file.text());
       if (!isWorkspace(value))
         throw new Error(
@@ -1929,9 +1933,9 @@ function GuidePage({
           <span className="eyebrow">YOUR DATA, YOUR WORKSPACE</span>
           <h2>데이터 백업 · 복원</h2>
           <p>
-            이 버전은 현재 브라우저에 데이터를 저장합니다. 다른 기기와
-            동기화되지 않으며 브라우저 데이터를 삭제하면 기록도 삭제됩니다.
-            정기적으로 JSON 백업을 보관하세요.
+            {cloud
+              ? "기록은 로그인한 계정의 서버 작업 공간에 저장됩니다. 다른 기기에서 로그인하면 저장된 기록을 불러옵니다. 정기적으로 JSON 백업도 보관하세요."
+              : "예시 모드는 현재 브라우저에 데이터를 저장합니다. 다른 기기와 동기화되지 않으며 브라우저 데이터를 삭제하면 기록도 삭제됩니다. 정기적으로 JSON 백업을 보관하세요."}
           </p>
           <div className="data-counts">
             <span>
@@ -2013,8 +2017,49 @@ function GuidePage({
   );
 }
 
-export default function App() {
-  const { data, setData, warning, replace } = useWorkspace();
+export default function App({
+  connection,
+  onExit,
+  accountError,
+}: {
+  connection?: Connection;
+  onExit?: () => Promise<boolean>;
+  accountError?: string;
+}) {
+  const { data, setData, warning, replace, status, flush, reload, hasPending } =
+    useWorkspace(connection);
+  const [leaving, setLeaving] = useState(false);
+  const backup = () =>
+    download(
+      `HAVS-backup-${dateISO()}.json`,
+      JSON.stringify(data, null, 2),
+      "application/json",
+    );
+  async function exitWorkspace() {
+    if (!onExit || leaving) return;
+    setLeaving(true);
+    if (connection) await flush();
+    if (
+      connection &&
+      hasPending() &&
+      !confirm(
+        "저장되지 않은 변경이 있습니다. JSON 백업을 받지 않았다면 취소하고 먼저 백업하세요. 그래도 로그아웃할까요?",
+      )
+    ) {
+      setLeaving(false);
+      return;
+    }
+    await onExit();
+    setLeaving(false);
+  }
+  const syncLabel = {
+    local: "브라우저에 저장",
+    saved: "서버에 저장됨",
+    saving: "서버 저장 중…",
+    error: "서버 저장 실패",
+    conflict: "다른 기기의 변경 확인 필요",
+    expired: "다시 로그인 필요",
+  }[status];
   const [view, setView] = useState<View>("dashboard");
   const [menuOpen, setMenuOpen] = useState(false);
   const [assessmentForm, setAssessmentForm] = useState<
@@ -2042,7 +2087,9 @@ export default function App() {
         ? old.tools.map((t) => (t.id === tool.id ? tool : t))
         : [...old.tools, tool],
     }));
-    setToast("공구 정보를 저장했습니다.");
+    setToast(
+      connection ? "공구 정보를 변경했습니다." : "공구 정보를 저장했습니다.",
+    );
   };
   const saveProject = (project: Project) => {
     setData((old) => ({
@@ -2051,7 +2098,9 @@ export default function App() {
         ? old.projects.map((p) => (p.id === project.id ? project : p))
         : [...old.projects, project],
     }));
-    setToast("프로젝트를 저장했습니다.");
+    setToast(
+      connection ? "프로젝트를 기록했습니다." : "프로젝트를 저장했습니다.",
+    );
   };
   const saveAssessment = (assessment: Assessment) => {
     setData((old) => ({
@@ -2062,233 +2111,299 @@ export default function App() {
     }));
     setAssessmentForm(null);
     setReport({ assessment });
-    setToast("노출 평가를 저장했습니다.");
+    setToast(
+      connection ? "노출 평가를 기록했습니다." : "노출 평가를 저장했습니다.",
+    );
   };
   const page = navigation.find((item) => item.id === view)!;
   return (
-    <div className="app-shell">
-      {menuOpen && (
-        <button
-          className="sidebar-backdrop"
-          aria-label="메뉴 닫기"
-          onClick={() => setMenuOpen(false)}
-        />
-      )}
-      <aside className={`sidebar ${menuOpen ? "open" : ""}`}>
-        <button
-          className="brand"
-          onClick={() => selectView("dashboard")}
-          aria-label="HAVS 대시보드"
-        >
-          <span className="brand-mark">
-            <AudioLines size={27} strokeWidth={2.2} />
-          </span>
-          <span>
-            HAVS<span className="brand-dot">.</span>
-            <small>WORKPLACE INTELLIGENCE</small>
-          </span>
-        </button>
-        <div className="workspace-picker">
-          <span className="workspace-icon">
-            <HardHat size={19} />
-          </span>
-          <div>
-            <strong>안전관리 작업 공간</strong>
-            <small>Personal workspace</small>
-          </div>
-          <span className="workspace-status" />
-        </div>
-        <span className="nav-caption">WORKSPACE</span>
-        <nav aria-label="주 메뉴">
-          {navigation.map(({ id, title, icon: Icon }) => (
-            <button
-              key={id}
-              className={`nav-item ${view === id ? "selected" : ""}`}
-              onClick={() => selectView(id)}
-              aria-current={view === id ? "page" : undefined}
-            >
-              <Icon size={19} />
-              <span>{title}</span>
-              {id === "tools" && (
-                <span className="nav-count">{data.tools.length}</span>
-              )}
-              {id === "dashboard" && view === id && (
-                <span className="selected-dot" />
-              )}
-            </button>
-          ))}
-        </nav>
-        <div className="sidebar-bottom">
-          <div className="sidebar-tip">
-            <span className="tip-icon">
-              <ShieldCheck size={22} />
-            </span>
-            <strong>더 안전한 내일을 위해</strong>
-            <p>
-              공구를 이해하는 것이
-              <br />
-              위험 관리의 첫걸음입니다.
-            </p>
-            <button onClick={() => selectView("guide")}>
-              평가 기준 알아보기 <ArrowUpRight size={16} />
-            </button>
-          </div>
-          <div className="local-storage-note">
-            <span />
-            <div>
-              브라우저에 로컬 저장<small>가이드에서 데이터를 백업하세요</small>
-            </div>
-          </div>
-          <div className="sidebar-version">
-            HAVS WORKSPACE <span>v0.1</span>
-          </div>
-        </div>
-      </aside>
-      <div className="main-shell">
-        <header className="topbar">
-          <div className="breadcrumb">
-            <button
-              className="icon-button mobile-menu"
-              aria-label="메뉴 열기"
-              onClick={() => setMenuOpen(true)}
-            >
-              <Menu size={21} />
-            </button>
-            <span>내 작업 공간</span>
-            <ChevronRight size={14} />
-            <strong>{page.title}</strong>
-          </div>
-          <div className="topbar-actions">
-            <span className="today-date">
-              <span />
-              {new Intl.DateTimeFormat("ko-KR", {
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-                weekday: "short",
-                timeZone: "Asia/Seoul",
-              }).format(new Date())}
-            </span>
-            <button
-              className="icon-button backup-button"
-              aria-label="전체 데이터 JSON 백업"
-              title="전체 데이터 백업"
-              onClick={() =>
-                download(
-                  `HAVS-backup-${dateISO()}.json`,
-                  JSON.stringify(data, null, 2),
-                  "application/json",
-                )
-              }
-            >
-              <ArrowDownToLine size={18} />
-            </button>
-            <span className="topbar-divider" />
-            <span className="profile-avatar" title="로컬 작업 공간">
-              ME
-            </span>
-          </div>
-        </header>
-        <main id="main-content">
-          {warning && (
-            <div className="storage-warning" role="alert">
-              <TriangleAlert size={19} />
-              <span>{warning}</span>
-              <button onClick={() => selectView("guide")}>데이터 관리</button>
-            </div>
-          )}
-          {view === "dashboard" && (
-            <Dashboard
-              data={data}
-              selectView={selectView}
-              onNew={() => setAssessmentForm("new")}
-              onOpen={(assessment) => setReport({ assessment })}
-            />
-          )}
-          {view === "tools" && (
-            <ToolsPage
-              data={data}
-              onSave={saveTool}
-              onDelete={(id) => {
-                setData((old) => ({
-                  ...old,
-                  tools: old.tools.filter((t) => t.id !== id),
-                }));
-                setToast("공구를 삭제했습니다. 이전 평가 기록은 보존됩니다.");
-              }}
-            />
-          )}
-          {view === "assessments" && (
-            <AssessmentPage
-              data={data}
-              onNew={() => setAssessmentForm("new")}
-              onOpen={(assessment) => setReport({ assessment })}
-            />
-          )}
-          {view === "projects" && (
-            <ProjectsPage
-              data={data}
-              onSave={saveProject}
-              onReport={(project) => setReport({ project })}
-            />
-          )}
-          {view === "guide" && (
-            <GuidePage data={data} replace={replace} notify={setToast} />
-          )}
-          <footer className="page-footer">
-            <span>
-              HAVS<span className="brand-dot">.</span>{" "}
-              <span>작은 기록, 더 안전한 현장.</span>
-            </span>
-            <span>
-              UK HSE 참고 기준 <span className="footer-dot">·</span> 이
-              브라우저에 저장
-            </span>
-          </footer>
-        </main>
-      </div>
-      {assessmentForm && (
-        <AssessmentForm
-          data={data}
-          assessment={assessmentForm === "new" ? undefined : assessmentForm}
-          onSave={saveAssessment}
-          onClose={() => setAssessmentForm(null)}
-        />
-      )}
-      {report && (
-        <Report
-          {...report}
-          data={data}
-          onClose={() => setReport(null)}
-          onEdit={(assessment) => {
-            setReport(null);
-            setAssessmentForm(assessment);
-          }}
-          onDelete={(assessment) => {
-            setData((old) => ({
-              ...old,
-              assessments: old.assessments.filter(
-                (a) => a.id !== assessment.id,
-              ),
-            }));
-            setReport(null);
-            setToast("평가 기록을 삭제했습니다.");
-          }}
-        />
-      )}
-      {toast && (
-        <div className="toast" role="status">
-          <CheckCircle2 size={18} />
-          {toast}
+    <>
+      <div className="app-shell" inert={leaving} aria-busy={leaving}>
+        {menuOpen && (
           <button
-            className="icon-button"
-            aria-label="알림 닫기"
-            onClick={() => setToast("")}
+            className="sidebar-backdrop"
+            aria-label="메뉴 닫기"
+            onClick={() => setMenuOpen(false)}
+          />
+        )}
+        <aside className={`sidebar ${menuOpen ? "open" : ""}`}>
+          <button
+            className="brand"
+            onClick={() => selectView("dashboard")}
+            aria-label="HAVS 대시보드"
           >
-            <X size={14} />
+            <span className="brand-mark">
+              <AudioLines size={27} strokeWidth={2.2} />
+            </span>
+            <span>
+              HAVS<span className="brand-dot">.</span>
+              <small>WORKPLACE INTELLIGENCE</small>
+            </span>
           </button>
+          <div className="workspace-picker">
+            <span className="workspace-icon">
+              <HardHat size={19} />
+            </span>
+            <div>
+              <strong>
+                {connection
+                  ? `${connection.user.name}님의 작업 공간`
+                  : "안전관리 작업 공간"}
+              </strong>
+              <small>
+                {connection ? "Personal workspace" : "Demo workspace"}
+              </small>
+            </div>
+            <span className="workspace-status" />
+          </div>
+          <span className="nav-caption">WORKSPACE</span>
+          <nav aria-label="주 메뉴">
+            {navigation.map(({ id, title, icon: Icon }) => (
+              <button
+                key={id}
+                className={`nav-item ${view === id ? "selected" : ""}`}
+                onClick={() => selectView(id)}
+                aria-current={view === id ? "page" : undefined}
+              >
+                <Icon size={19} />
+                <span>{title}</span>
+                {id === "tools" && (
+                  <span className="nav-count">{data.tools.length}</span>
+                )}
+                {id === "dashboard" && view === id && (
+                  <span className="selected-dot" />
+                )}
+              </button>
+            ))}
+          </nav>
+          <div className="sidebar-bottom">
+            <div className="sidebar-tip">
+              <span className="tip-icon">
+                <ShieldCheck size={22} />
+              </span>
+              <strong>더 안전한 내일을 위해</strong>
+              <p>
+                공구를 이해하는 것이
+                <br />
+                위험 관리의 첫걸음입니다.
+              </p>
+              <button onClick={() => selectView("guide")}>
+                평가 기준 알아보기 <ArrowUpRight size={16} />
+              </button>
+            </div>
+            <div className="local-storage-note">
+              <span />
+              <div>
+                {connection ? "계정별 서버 보관" : "예시 모드 · 브라우저 저장"}
+                <small>가이드에서 데이터를 백업하세요</small>
+              </div>
+            </div>
+            <div className="sidebar-version">
+              HAVS WORKSPACE <span>v0.2</span>
+            </div>
+          </div>
+        </aside>
+        <div className="main-shell">
+          <header className="topbar">
+            <div className="breadcrumb">
+              <button
+                className="icon-button mobile-menu"
+                aria-label="메뉴 열기"
+                onClick={() => setMenuOpen(true)}
+              >
+                <Menu size={21} />
+              </button>
+              <span>내 작업 공간</span>
+              <ChevronRight size={14} />
+              <strong>{page.title}</strong>
+            </div>
+            <div className="topbar-actions">
+              <span className="today-date">
+                <span />
+                {new Intl.DateTimeFormat("ko-KR", {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                  weekday: "short",
+                  timeZone: "Asia/Seoul",
+                }).format(new Date())}
+              </span>
+              <button
+                className="icon-button backup-button"
+                aria-label="전체 데이터 JSON 백업"
+                title="전체 데이터 백업"
+                onClick={() =>
+                  download(
+                    `HAVS-backup-${dateISO()}.json`,
+                    JSON.stringify(data, null, 2),
+                    "application/json",
+                  )
+                }
+              >
+                <ArrowDownToLine size={18} />
+              </button>
+              <span className="topbar-divider" />
+              <span
+                className="profile-avatar"
+                title={connection?.user.email || "예시 작업 공간"}
+              >
+                {connection?.user.name.slice(0, 2) || "ME"}
+              </span>
+              {onExit && (
+                <button
+                  className="account-exit"
+                  disabled={leaving}
+                  onClick={() => void exitWorkspace()}
+                >
+                  <LogOut size={16} />
+                  {leaving ? "확인 중…" : connection ? "로그아웃" : "로그인"}
+                </button>
+              )}
+            </div>
+          </header>
+          <main id="main-content">
+            {connection && (
+              <div className="remote-account-bar">
+                <span className="account-caption">{connection.user.email}</span>
+                <span className={`sync-label ${status}`} role="status">
+                  <span />
+                  {syncLabel}
+                </span>
+              </div>
+            )}
+            {(warning || accountError) && (
+              <div className="storage-warning" role="alert">
+                <TriangleAlert size={19} />
+                <span>{warning || accountError}</span>
+                <div className="sync-actions">
+                  <button onClick={backup}>JSON 백업</button>
+                  {connection && status === "error" && (
+                    <button onClick={() => void flush()}>다시 저장</button>
+                  )}
+                  {connection && status === "conflict" && (
+                    <button onClick={() => void reload()}>
+                      서버 기록 다시 불러오기
+                    </button>
+                  )}
+                  {connection && status === "expired" && (
+                    <button
+                      disabled={leaving}
+                      onClick={() => void exitWorkspace()}
+                    >
+                      다시 로그인
+                    </button>
+                  )}
+                  {!connection && (
+                    <button onClick={() => selectView("guide")}>
+                      데이터 관리
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+            {view === "dashboard" && (
+              <Dashboard
+                data={data}
+                selectView={selectView}
+                onNew={() => setAssessmentForm("new")}
+                onOpen={(assessment) => setReport({ assessment })}
+              />
+            )}
+            {view === "tools" && (
+              <ToolsPage
+                data={data}
+                onSave={saveTool}
+                onDelete={(id) => {
+                  setData((old) => ({
+                    ...old,
+                    tools: old.tools.filter((t) => t.id !== id),
+                  }));
+                  setToast("공구를 삭제했습니다. 이전 평가 기록은 보존됩니다.");
+                }}
+              />
+            )}
+            {view === "assessments" && (
+              <AssessmentPage
+                data={data}
+                onNew={() => setAssessmentForm("new")}
+                onOpen={(assessment) => setReport({ assessment })}
+              />
+            )}
+            {view === "projects" && (
+              <ProjectsPage
+                data={data}
+                onSave={saveProject}
+                onReport={(project) => setReport({ project })}
+              />
+            )}
+            {view === "guide" && (
+              <GuidePage
+                data={data}
+                replace={replace}
+                notify={setToast}
+                cloud={!!connection}
+              />
+            )}
+            <footer className="page-footer">
+              <span>
+                HAVS<span className="brand-dot">.</span>{" "}
+                <span>작은 기록, 더 안전한 현장.</span>
+              </span>
+              <span>
+                UK HSE 참고 기준 <span className="footer-dot">·</span>{" "}
+                {connection ? "계정별 서버 저장" : "예시 · 브라우저 저장"}
+              </span>
+            </footer>
+          </main>
+        </div>
+        {assessmentForm && (
+          <AssessmentForm
+            data={data}
+            assessment={assessmentForm === "new" ? undefined : assessmentForm}
+            onSave={saveAssessment}
+            onClose={() => setAssessmentForm(null)}
+          />
+        )}
+        {report && (
+          <Report
+            {...report}
+            data={data}
+            onClose={() => setReport(null)}
+            onEdit={(assessment) => {
+              setReport(null);
+              setAssessmentForm(assessment);
+            }}
+            onDelete={(assessment) => {
+              setData((old) => ({
+                ...old,
+                assessments: old.assessments.filter(
+                  (a) => a.id !== assessment.id,
+                ),
+              }));
+              setReport(null);
+              setToast("평가 기록을 삭제했습니다.");
+            }}
+          />
+        )}
+        {toast && (
+          <div className="toast" role="status">
+            <CheckCircle2 size={18} />
+            {toast}
+            <button
+              className="icon-button"
+              aria-label="알림 닫기"
+              onClick={() => setToast("")}
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
+      </div>
+      {leaving && (
+        <div className="account-leaving" role="status">
+          저장 상태와 로그인을 확인하고 있습니다…
         </div>
       )}
-    </div>
+    </>
   );
 }
