@@ -7,7 +7,7 @@ type Fixtures = {
   invitation: Account & { code: string };
 };
 let fixtures: Fixtures;
-const baseURL = "http://127.0.0.1:5174";
+const baseURL = process.env.HAVS_E2E_BASE_URL ?? "http://127.0.0.1:5174";
 
 test.beforeAll(async () => {
   const path = process.env.HAVS_E2E_FIXTURE_FILE;

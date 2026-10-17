@@ -17,3 +17,7 @@ backups/
 *.sqlite3
 *.db
 *.db-*
+.wrangler/
+.dev.vars
+.dev.vars.*
+.cloudflare-deploy/

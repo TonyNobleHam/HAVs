@@ -3,7 +3,8 @@ import { createReadStream } from 'node:fs';
 import { stat, realpath } from 'node:fs/promises';
 import { resolve, extname, sep } from 'node:path';
 import { timingSafeEqual } from 'node:crypto';
-import { isWorkspace } from '../src/domain.ts';
+import { validateWorkspace } from './validation.mjs';
+export { validateWorkspace } from './validation.mjs';
 import { openStore, normalizeEmail, validEmail, validPassword, validName, verifyPassword } from './store.mjs';
 
 const MAX_BODY = 2 * 1024 * 1024;
@@ -11,23 +12,6 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; cha
 const DUMMY_HASH = 'scrypt:00000000000000000000000000000000:' + '00'.repeat(64);
 const safeEqual = (a, b) => typeof a === 'string' && typeof b === 'string' && a.length === b.length && Buffer.byteLength(a) === Buffer.byteLength(b) && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 const plainObject = (v) => typeof v === 'object' && v !== null && !Array.isArray(v);
-
-export function validateWorkspace(workspace) {
-  if (!isWorkspace(workspace)) return false;
-  if (workspace.tools.length > 10000 || workspace.projects.length > 10000 || workspace.assessments.length > 10000) return false;
-  // Bound nested user strings and reject unknown fields to keep stored documents predictable.
-  const fields = {
-    tool: ['id','name','model','category','vibration','noise','source','inspectionDue','sample'],
-    project: ['id','name','site','manager'],
-    assessment: ['id','worker','projectId','date','activities','notes','createdAt'],
-    activity: ['id','toolId','toolName','vibration','noise','minutes','source','sample'],
-  };
-  const validFields = (item, allowed) => Object.keys(item).every((key) => allowed.includes(key)) && Object.values(item).every((value) => typeof value !== 'string' || value.length <= 10000);
-  return Object.keys(workspace).every((key) => ['version','tools','projects','assessments'].includes(key)) &&
-    workspace.tools.every((item) => validFields(item, fields.tool)) &&
-    workspace.projects.every((item) => validFields(item, fields.project)) &&
-    workspace.assessments.every((item) => validFields(item, fields.assessment) && item.activities.length <= 1000 && item.activities.every((row) => validFields(row, fields.activity)));
-}
 
 export function createApp(options = {}) {
   const production = options.production ?? process.env.NODE_ENV === 'production';
@@ -134,8 +118,10 @@ export function createApp(options = {}) {
           verifiedPasswordHash = found.password_hash;
         } else {
           if (!validName(body.name) || !validPassword(body.password) || typeof body.inviteCode !== 'string') return fail(res, 400, 'INVALID_REGISTRATION', '이름, 12~128자 비밀번호, 초대 코드를 확인해 주세요.');
-          user = await store.register({ ...body, email });
-          if (!user) return fail(res, 400, 'REGISTRATION_FAILED', '가입 정보를 확인해 주세요. 사용 가능한 초대 코드와 미등록 이메일이 필요합니다.');
+          const registration = await store.register({ ...body, email });
+          if (!registration) return fail(res, 400, 'REGISTRATION_FAILED', '가입 정보를 확인해 주세요. 사용 가능한 초대 코드와 미등록 이메일이 필요합니다.');
+          user = registration.user;
+          verifiedPasswordHash = registration.verifiedPasswordHash;
         }
         const session = store.createSession(user.id, sessionTtlMs, verifiedPasswordHash);
         if (!session) return fail(res, 401, 'LOGIN_FAILED', '이메일 또는 비밀번호가 올바르지 않습니다.');

@@ -58,7 +58,9 @@ export function useWorkspace(connection?: Connection) {
       current.current = next;
       if (connection && !blocked.current)
         setStatus(
-          !inFlight.current && JSON.stringify(next) === committed.current ? "saved" : "saving",
+          !inFlight.current && JSON.stringify(next) === committed.current
+            ? "saved"
+            : "saving",
         );
       setState(next);
     },
@@ -102,6 +104,11 @@ export function useWorkspace(connection?: Connection) {
             setStatus("expired");
             setWarning(
               "로그인이 만료되었거나 저장 권한을 확인할 수 없습니다. 현재 변경을 JSON으로 백업한 뒤 다시 로그인하세요.",
+            );
+          } else if (httpStatus === 413) {
+            setStatus("error");
+            setWarning(
+              "저장 용량을 초과했습니다. 현재 변경은 이 화면에 남아 있습니다. JSON 백업을 보관한 뒤 불필요한 기록을 정리해 주세요.",
             );
           } else {
             setStatus("error");

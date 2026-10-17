@@ -4,6 +4,8 @@
 
 화면 캡처: [로그인](docs/screenshots/login.png) · [모바일 로그인](docs/screenshots/login-mobile.png) · [대시보드](docs/screenshots/dashboard.png) · [노출 평가](docs/screenshots/assessment.png) · [모바일](docs/screenshots/mobile.png).
 
+배포 방식: [Cloudflare Workers + D1](docs/cloudflare.md) · [개인 PC 설치](docs/local-pc.md) · [Docker 서버 운영](docs/deployment.md). Cloudflare 방식은 별도 상시 실행 서버 없이 운영하도록 준비되어 있으며, 실제 게시에는 해당 Cloudflare 계정 연결이 필요합니다.
+
 ## 실행
 
 Node.js 24 이상과 npm을 사용합니다. Node 내장 SQLite를 사용하므로 별도 DB 서버나 API 키는 필요하지 않습니다.
@@ -24,13 +26,13 @@ npm run admin -- create-user --email owner@example.com --name '운영자'
 
 `dev:full`은 API(3001)와 Vite(5173)를 함께 실행합니다. 기본 주소와 다른 포트 미리보기 URL을 사용할 때는 `APP_ORIGIN`을 실제 브라우저 출처로 설정합니다. `npm run dev`는 화면 개발용 Vite만 실행합니다. 로그인 없이 확인하려면 **예시로 둘러보기** 또는 `http://localhost:5173/?demo=1`을 사용합니다.
 
-배포용 화면은 `npm run build`로 `dist/`에 생성합니다. Node 서버가 API와 `dist/`를 함께 제공합니다. **로그인·서버 저장에는 Node 서버와 지속 데이터 볼륨이 필요합니다.** 정적 파일만 배포하면 서버 기능을 사용할 수 없습니다. Docker Compose + Caddy HTTPS 구성, 계정 관리, 백업·복구는 [배포 안내](docs/deployment.md)를 참고하세요. 공개 배포에는 사용할 도메인과 서버가 필요하며, Codex 클라우드 환경 게시와 웹 앱 배포는 별개입니다.
+배포용 화면은 `npm run build`로 `dist/`에 생성합니다. **Cloudflare에서는 Workers가 API를 실행하고 D1에 저장하므로 별도 서버가 필요하지 않습니다.** `npm run cf:dev`로 이 구성을 로컬에서 확인할 수 있으며 계정 연결과 실제 배포는 [Cloudflare 안내](docs/cloudflare.md)를 따릅니다. PC·Docker 방식에서는 Node 서버가 API와 화면을 함께 제공하고 SQLite에 저장합니다. Docker Compose + Caddy HTTPS 구성은 [서버 배포 안내](docs/deployment.md)를 참고하세요. 정적 파일만 배포하면 로그인·서버 저장 기능을 사용할 수 없습니다. Codex 클라우드 환경 게시와 웹 앱 배포는 별개입니다.
 
 `.npmrc`는 제한된 클라우드 작업 공간에서도 설치할 수 있도록 npm 캐시를 저장소 내부의 무시되는 `.npm-cache/`에 보관합니다. 각 클라우드 작업은 이미 격리되어 있으므로 기존 체크아웃을 사용하며, 별도 Git worktree가 필요하지 않습니다.
 
 ## 기능
 
-- **로그인·서버 저장:** 초대 가입, 계정별 SQLite 작업 공간, 다른 기기에서 접근, 세션 쿠키·출처·CSRF 검사, 서버 CLI를 통한 비밀번호 재설정.
+- **로그인·서버 저장:** 초대 가입, 계정별 작업 공간, 다른 기기에서 접근, 세션 쿠키·출처·CSRF 검사, 관리 CLI를 통한 비밀번호 재설정. Cloudflare는 D1, PC·Docker는 SQLite에 저장합니다.
 - **대시보드:** 오늘의 평가, 최근 7일 일별 최대 A(8), 진동 위험 수준 분포, 공구별 진동 기여도, 점검 예정 안내. 모든 수치는 저장된 기록에서 계산합니다.
 - **공구 데이터베이스:** 등록·검색·분류·수정·삭제, 진동 합성값과 LAeq, 데이터 출처와 작업 조건, 예시 데이터 표시, 점검일 관리.
 - **일일 노출 평가:** 여러 공구의 실제 사용 시간을 합산한 A(8), 노출 점수, 소음 LEX,8h의 실시간 계산. 같은 작업자 이름·날짜의 평가 중복을 방지합니다. 하루 전체 작업을 하나의 평가에 입력합니다.
@@ -43,7 +45,7 @@ npm run admin -- create-user --email owner@example.com --name '운영자'
 
 ## 저장 범위
 
-로그인 모드의 데이터는 서버의 `data/havs.sqlite`에 계정별로 저장됩니다. Docker에서는 지속 볼륨을 사용합니다. 같은 계정의 다른 기기에서 기록을 확인할 수 있으며, 동시 편집 충돌 시 상대 기록을 자동 덮어쓰지 않고 충돌을 알립니다. 서버 저장 실패 상태에서는 변경 사항이 메모리에만 남을 수 있으므로 화면을 닫기 전에 JSON 백업을 내보냅니다. 전체 서버 복구에는 계정 정보까지 포함한 SQLite 백업이 필요합니다.
+로그인 모드의 데이터는 Cloudflare에서는 D1에, PC·Docker에서는 `data/havs.sqlite`에 계정별로 저장됩니다. Docker에서는 지속 볼륨을 사용합니다. 같은 배포의 같은 계정으로 다른 기기에서 기록을 확인할 수 있으며, 동시 편집 충돌 시 상대 기록을 자동 덮어쓰지 않고 충돌을 알립니다. Cloudflare와 PC의 DB는 자동 동기화되지 않습니다. 서버 저장 실패 상태에서는 변경 사항이 메모리에만 남을 수 있으므로 화면을 닫기 전에 JSON 백업을 내보냅니다. 계정까지 복구하려면 해당 환경의 D1 또는 SQLite 전체 백업이 필요합니다.
 
 **예시로 둘러보기** 모드에서는 현재 브라우저의 `localStorage`(`havs.workspace.v1`)에 저장합니다. 이 모드의 기록은 다른 기기와 동기화되지 않습니다. 브라우저 저장 데이터를 삭제하면 사라질 수 있으므로 JSON 백업을 보관하세요. 기존 로컬 기록을 가져와도 원본은 지우지 않습니다.
 
@@ -74,10 +76,11 @@ npm run admin -- create-user --email owner@example.com --name '운영자'
 ## 검증
 
 ```bash
-npm test             # 계산, 백업 검증, 서버 인증·격리·저장 검증
+npm test             # 계산, 백업, Node·Worker 인증 및 SQLite·D1 검증
 npm run build        # TypeScript 검사 + 프로덕션 빌드
 npm run test:e2e     # 실제 Chromium 사용자 흐름
 npm run test:e2e:server # 로그인·서버 저장·브라우저 간 충돌 흐름
+npm run test:e2e:cloudflare # Worker·D1·정적 파일을 통한 동일 사용자 흐름
 ```
 
 브라우저 테스트는 시스템의 `/usr/bin/chromium`을 사용합니다. 다른 위치는 `CHROMIUM_PATH`로 지정할 수 있습니다. 시스템 Chromium이 없으면 `npx playwright install chromium` 후 Playwright의 기본 브라우저를 사용합니다. 예시 모드 테스트는 기존 5173 포트의 Vite를 재사용할 수 있습니다. 서버 모드 테스트는 별도의 5174/3002 포트와 임시 DB·테스트 계정을 사용하고 종료 시 삭제합니다.

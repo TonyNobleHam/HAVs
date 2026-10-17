@@ -92,6 +92,24 @@ test('session cookie, exact Origin and CSRF protect workspace and logout', async
   assert.equal((await request('/api/session', auth)).status, 401);
 });
 
+test('a password reset during signup prevents a session for the original password', async (t) => {
+  const { app, request } = await fixture(t);
+  const email = 'signup-reset@example.test';
+  const invite = app.store.createInvite({ email });
+  const register = app.store.register.bind(app.store);
+  app.store.register = async (details) => {
+    const receipt = await register(details);
+    await app.store.resetPassword(email, 'replacement-password-67890');
+    return receipt;
+  };
+  const result = await request('/api/auth/register', {
+    method: 'POST', body: { email, name: 'Reset during signup', password, inviteCode: invite.code },
+  });
+  assert.equal(result.status, 401);
+  assert.equal(result.headers.get('set-cookie'), null);
+  assert.equal(app.store.db.prepare('SELECT count(*) AS count FROM sessions').get().count, 0);
+});
+
 test('login rejects cross-site requests and supplies private HttpOnly cookies', async (t) => {
   const { app, request } = await fixture(t);
   await app.store.createUser({ email: 'one@example.test', name: 'One', password });

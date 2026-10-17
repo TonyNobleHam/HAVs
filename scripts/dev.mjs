@@ -50,7 +50,7 @@ process.once('SIGTERM', () => stop(0));
 start('HAVS API', ['--experimental-strip-types', 'server/index.mjs'], {
   NODE_ENV: 'development',
 });
-start('Vite', ['node_modules/vite/bin/vite.js', '--host', '0.0.0.0', '--port', '5173', '--strictPort'], {
+start('Vite', ['node_modules/vite/bin/vite.js', '--host', process.env.VITE_HOST ?? '127.0.0.1', '--port', '5173', '--strictPort'], {
   NODE_ENV: 'development',
   VITE_API_TARGET: process.env.VITE_API_TARGET ?? `http://127.0.0.1:${process.env.PORT ?? '3001'}`,
 });

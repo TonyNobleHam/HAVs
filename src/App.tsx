@@ -52,6 +52,7 @@ import type {
 } from "./domain";
 import { download, useWorkspace } from "./storage";
 import type { Connection } from "./api";
+import { assertWorkspaceSize } from "./api";
 
 type View = "dashboard" | "tools" | "assessments" | "projects" | "guide";
 const navigation: { id: View; title: string; icon: typeof Waves }[] = [
@@ -1823,13 +1824,14 @@ function GuidePage({
     if (!file) return;
     setImportError("");
     try {
-      if (file.size > (cloud ? 2_000_000 : 5_000_000))
-        throw new Error(`백업 파일은 ${cloud ? 2 : 5}MB 이하여야 합니다.`);
+      if (file.size > 5_000_000)
+        throw new Error("백업 파일은 5MB 이하여야 합니다.");
       const value: unknown = JSON.parse(await file.text());
       if (!isWorkspace(value))
         throw new Error(
           "지원하는 HAVS 백업 형식이 아닙니다. 원래 내보낸 JSON 파일을 선택하세요.",
         );
+      if (cloud) assertWorkspaceSize(value);
       if (
         !confirm(
           "현재 작업 공간을 백업 파일의 내용으로 교체할까요? 먼저 현재 데이터를 백업하는 것을 권장합니다.",
@@ -2199,7 +2201,7 @@ export default function App({
               </div>
             </div>
             <div className="sidebar-version">
-              HAVS WORKSPACE <span>v0.2</span>
+              HAVS WORKSPACE <span>v0.3</span>
             </div>
           </div>
         </aside>

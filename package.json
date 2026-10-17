@@ -1,7 +1,7 @@
 {
   "name": "havs-workspace",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "engines": {
     "node": ">=24.0.0"
@@ -16,7 +16,13 @@
     "server": "node --experimental-strip-types server/index.mjs",
     "start": "node --experimental-strip-types server/index.mjs",
     "admin": "node --experimental-strip-types server/manage.mjs",
-    "dev:full": "node scripts/dev.mjs"
+    "dev:full": "node scripts/dev.mjs",
+    "cf:dev": "node scripts/cloudflare-dev.mjs",
+    "cf:setup": "node scripts/cloudflare-setup.mjs",
+    "cf:deploy": "node scripts/cloudflare-deploy.mjs",
+    "cf:admin": "node scripts/cloudflare-admin.mjs",
+    "test:cloudflare": "node --experimental-strip-types --test tests/cloudflare-*.test.mjs",
+    "test:e2e:cloudflare": "playwright test --config playwright.cloudflare.config.ts"
   },
   "dependencies": {
     "@fontsource-variable/noto-sans-kr": "^5.3.1",
@@ -28,7 +34,10 @@
     "@playwright/test": "^1.64.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "esbuild": "0.28.2",
+    "miniflare": "5.20261012.1-beta",
     "typescript": "^7.0.2",
-    "vite": "^8.3.4"
+    "vite": "^8.3.4",
+    "wrangler": "4.151.1"
   }
 }

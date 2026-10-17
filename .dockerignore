@@ -15,6 +15,10 @@ backups
 **/*.db-*
 test-results
 playwright-report
+.wrangler
+.dev.vars
+.dev.vars.*
+.cloudflare-deploy
 docs
 e2e
 tests

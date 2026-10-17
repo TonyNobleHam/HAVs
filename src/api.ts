@@ -1,5 +1,6 @@
 import { isWorkspace } from "./domain";
 import type { Workspace } from "./domain";
+import { MAX_SYNC_WORKSPACE_BYTES } from "./limits";
 
 export type Session = {
   user: { id: string; email: string; name: string };
@@ -97,6 +98,7 @@ export async function putWorkspace(
   revision: number,
   csrfToken: string,
 ) {
+  assertWorkspaceSize(workspace);
   const result = await request<{ revision: number }>("/workspace", {
     method: "PUT",
     headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken },
@@ -108,4 +110,15 @@ export async function putWorkspace(
       "저장 완료 여부를 확인할 수 없습니다. 서버 기록을 다시 확인하세요.",
     );
   return result;
+}
+
+export function assertWorkspaceSize(workspace: Workspace) {
+  if (
+    new TextEncoder().encode(JSON.stringify(workspace)).byteLength >
+    MAX_SYNC_WORKSPACE_BYTES
+  )
+    throw new ApiError(
+      413,
+      "서버에 보관할 작업 공간은 1.9MB 이하여야 합니다. JSON 백업을 보관한 뒤 불필요한 기록을 정리해 주세요.",
+    );
 }
